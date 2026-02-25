@@ -7,10 +7,13 @@ Teams, Calendar, Notion, GitHub 알림을 한곳에서 모아보는 macOS 사이
 - **통합 알림**: Teams, GitHub, Notion, macOS Calendar, Google Calendar
 - **즐겨찾기**: 중요한 알림 3개를 상단에 고정
 - **최근 알림**: 최신 5-7개 알림을 시간순 표시
+- **캘린더 섹션**: 미래 이벤트만 시간순 정렬, lookahead 시간 설정 가능 (6~72시간)
 - **사이드바 패널**: 포커스를 뺏지 않는 always-on-top 패널, 모든 Spaces에 표시
+- **동적 높이**: 콘텐츠 양에 따라 패널 높이 자동 조절
 - **메뉴바 앱**: Dock 아이콘 없이 메뉴바에서 토글 (좌클릭: 패널 토글, 우클릭: 메뉴)
 - **자동 폴링**: 설정 가능한 주기(30초~5분)로 자동 새로고침
 - **서비스별 설정**: OAuth 인증, 서비스 노출 토글, 폴링 주기 설정
+- **배경 투명도**: 슬라이더로 위젯 배경 투명도 조절
 - **에러 처리**: 서비스별 에러 배너, 캘린더 권한 거부 시 시스템 설정 안내
 
 ## Tech Stack
@@ -27,9 +30,9 @@ Teams, Calendar, Notion, GitHub 알림을 한곳에서 모아보는 macOS 사이
 swift build
 .build/debug/WorkWidget
 
-# .app 번들 생성 (release) - OAuth 콜백 URL scheme 필요 시
+# .app 번들 생성 + /Applications 설치 (release)
 bash Scripts/build-app.sh
-open WorkWidget.app
+open /Applications/WorkWidget.app
 ```
 
 ## OAuth 서비스 연동
@@ -58,11 +61,11 @@ Sources/
 ├── Main.swift                  # AppDelegate, 메뉴바 아이콘, 우클릭 메뉴
 ├── App/
 │   ├── SidebarPanel.swift      # NSPanel (non-activating, floating)
-│   └── PanelController.swift   # 패널 생성/관리
+│   └── PanelController.swift   # 패널 생성/관리, 동적 높이 (AutoSizingHostingView)
 ├── Models/                     # WorkNotification, ServiceType, OAuthTokens, ServiceConfig
 ├── ViewModels/
-│   ├── NotificationStore.swift # 알림 상태관리, 폴링 타이머
-│   └── SettingsStore.swift     # 설정 저장 (UserDefaults)
+│   ├── NotificationStore.swift # 알림 상태관리, 폴링 타이머, 캘린더 분리
+│   └── SettingsStore.swift     # 설정 저장 (UserDefaults, 투명도/lookahead)
 ├── Services/
 │   ├── NotificationService.swift      # 프로토콜 정의
 │   ├── GitHubService.swift            # GitHub REST API
@@ -78,17 +81,9 @@ Sources/
 │   ├── HTTPClient.swift        # URLSession actor 래퍼
 │   └── APIModels/              # 서비스별 API 응답 모델
 └── Views/
-    ├── PanelContentView.swift  # 루트 SwiftUI 뷰
-    ├── PinnedSection.swift     # 상단 즐겨찾기 영역
-    ├── RecentSection.swift     # 하단 최근 알림 (스크롤)
-    ├── NotificationRow.swift   # 개별 알림 행 (호버 효과)
-    ├── BottomBar.swift         # 새로고침 + 설정 버튼
-    └── SettingsView.swift      # 설정 시트 (인증/토글/폴링)
+    ├── PanelContentView.swift     # 루트 SwiftUI 뷰
+    ├── NotificationSection.swift  # 공통 섹션 (Pinned/Recent/Upcoming)
+    ├── NotificationRow.swift      # 개별 알림 행 (호버 효과)
+    ├── BottomBar.swift            # 새로고침 + 설정 버튼
+    └── SettingsView.swift         # 설정 시트 (인증/토글/폴링/투명도/캘린더)
 ```
-
-## Implementation Status
-
-- [x] Phase 1: 프로젝트 스캐폴딩 + 사이드바 셸 + Mock UI
-- [x] Phase 2: OAuth 인증 + Keychain + HTTPClient
-- [x] Phase 3: 서비스 통합 (GitHub/Teams/Notion/EventKit/Google Calendar)
-- [x] Phase 4: UI 완성 (폴링, 애니메이션, 에러 처리, 호버 효과)

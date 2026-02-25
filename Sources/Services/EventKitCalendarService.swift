@@ -5,6 +5,11 @@ final class EventKitCalendarService: NotificationService, @unchecked Sendable {
     let serviceType: ServiceType = .eventKit
 
     private let eventStore = EKEventStore()
+    private weak var settingsStore: SettingsStore?
+
+    init(settingsStore: SettingsStore? = nil) {
+        self.settingsStore = settingsStore
+    }
 
     func fetchNotifications() async throws -> [WorkNotification] {
         // Check current authorization first
@@ -20,7 +25,8 @@ final class EventKitCalendarService: NotificationService, @unchecked Sendable {
         }
 
         let now = Date()
-        let endDate = Calendar.current.date(byAdding: .hour, value: 24, to: now)!
+        let lookaheadHours = settingsStore?.calendarLookaheadHours ?? 24
+        let endDate = Calendar.current.date(byAdding: .hour, value: lookaheadHours, to: now)!
 
         let predicate = eventStore.predicateForEvents(
             withStart: now,

@@ -17,7 +17,7 @@ final class SidebarPanel: NSPanel {
         )
 
         isFloatingPanel = true
-        level = .floating
+        level = .statusBar
         collectionBehavior = [
             .canJoinAllSpaces,
             .fullScreenAuxiliary,

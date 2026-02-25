@@ -28,5 +28,11 @@ codesign --force --deep --sign - "${APP_BUNDLE}"
 # Remove quarantine attribute so macOS doesn't block the local build
 xattr -cr "${APP_BUNDLE}" 2>/dev/null || true
 
+# Install to /Applications for Spotlight discovery
+echo "Installing to /Applications..."
+rm -rf "/Applications/${APP_BUNDLE}"
+cp -R "${APP_BUNDLE}" "/Applications/${APP_BUNDLE}"
+
 echo "Built: ${APP_BUNDLE}"
-echo "Run with: open ${APP_BUNDLE}"
+echo "Installed to: /Applications/${APP_BUNDLE}"
+echo "Run with: open /Applications/${APP_BUNDLE}"

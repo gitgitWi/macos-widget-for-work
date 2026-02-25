@@ -63,34 +63,52 @@ struct PanelContentView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            PinnedSection(
+            NotificationSection(
+                icon: "pin.fill",
+                title: "Pinned",
+                emptyMessage: "No pinned notifications",
                 notifications: notificationStore.pinnedNotifications,
-                onUnpin: { notificationStore.togglePin($0) },
-                onTap: { openURL($0.url) }
-            )
-
-            Divider()
-                .padding(.horizontal, 12)
-
-            RecentSection(
-                notifications: notificationStore.recentNotifications,
                 onPin: { notificationStore.togglePin($0) },
                 onTap: { openURL($0.url) }
             )
 
-            Spacer(minLength: 0)
+            NotificationSection(
+                icon: "clock",
+                title: "Recent",
+                emptyMessage: "No recent notifications",
+                notifications: notificationStore.recentNotifications,
+                showTopDivider: true,
+                scrollable: true,
+                onPin: { notificationStore.togglePin($0) },
+                onTap: { openURL($0.url) }
+            )
+            .frame(maxHeight: notificationStore.recentNotifications.isEmpty ? 50 : 280)
+
+            NotificationSection(
+                icon: "calendar",
+                title: "Upcoming",
+                emptyMessage: "No upcoming events",
+                notifications: notificationStore.calendarNotifications,
+                showTopDivider: true,
+                scrollable: true,
+                onPin: { notificationStore.togglePin($0) },
+                onTap: { openURL($0.url) }
+            )
+            .frame(maxHeight: 200)
 
             BottomBar(
                 isRefreshing: notificationStore.isRefreshing,
                 lastRefresh: notificationStore.lastRefreshDate,
+                backgroundOpacity: settingsStore.backgroundOpacity,
                 onRefresh: {
                     Task { await notificationStore.refreshAll() }
                 },
                 onSettings: { showSettings = true }
             )
         }
-        .frame(width: 308, height: 580)
-        .background(.ultraThinMaterial)
+        .frame(width: 308)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(.ultraThinMaterial.opacity(settingsStore.backgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .animation(.easeInOut(duration: 0.2), value: notificationStore.errors.count)
         .animation(.easeInOut(duration: 0.2), value: notificationStore.isShowingMockData)

@@ -27,8 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             GitHubService(oauthManager: oauthManager),
             TeamsService(oauthManager: oauthManager),
             NotionService(oauthManager: oauthManager),
-            EventKitCalendarService(),
-            GoogleCalendarService(oauthManager: oauthManager),
+            EventKitCalendarService(settingsStore: settingsStore),
+            GoogleCalendarService(oauthManager: oauthManager, settingsStore: settingsStore),
         ]
         notificationStore.configure(services: services, settingsStore: settingsStore)
 
@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsStore: settingsStore,
             oauthManager: oauthManager
         )
+        // Don't pass anchorFrame at launch — status item window isn't laid out yet
         panelController.showPanel()
     }
 
@@ -55,16 +56,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private var statusItemAnchorFrame: NSRect? {
+        statusItem.button?.window?.frame
+    }
+
     @objc private func statusItemClicked() {
         guard let event = NSApp.currentEvent else {
-            panelController.togglePanel()
+            panelController.togglePanel(anchorFrame: statusItemAnchorFrame)
             return
         }
 
         if event.type == .rightMouseUp {
             showStatusMenu()
         } else {
-            panelController.togglePanel()
+            panelController.togglePanel(anchorFrame: statusItemAnchorFrame)
         }
     }
 
@@ -81,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func togglePanel() {
-        panelController.togglePanel()
+        panelController.togglePanel(anchorFrame: statusItemAnchorFrame)
     }
 
     @objc private func quitApp() {

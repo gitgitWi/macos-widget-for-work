@@ -4,6 +4,7 @@ import Foundation
 final class NotificationStore: @unchecked Sendable {
     var pinnedNotifications: [WorkNotification] = []
     var recentNotifications: [WorkNotification] = []
+    var calendarNotifications: [WorkNotification] = []
     var isRefreshing: Bool = false
     var lastRefreshDate: Date?
     var errors: [ServiceType: String] = [:]
@@ -115,19 +116,28 @@ final class NotificationStore: @unchecked Sendable {
     }
 
     private func updateSections() {
+        let now = Date()
+
         let pinned = allNotifications
             .filter { pinnedIDs.contains($0.id) }
             .map { var n = $0; n.isPinned = true; return n }
             .sorted { $0.timestamp > $1.timestamp }
             .prefix(maxPinned)
 
+        // Non-calendar, non-pinned → Recent
         let recent = allNotifications
-            .filter { !pinnedIDs.contains($0.id) }
+            .filter { !pinnedIDs.contains($0.id) && !$0.service.isCalendar }
             .sorted { $0.timestamp > $1.timestamp }
             .prefix(maxRecent)
 
+        // Calendar, non-pinned, future only → Calendar section (ascending)
+        let calendar = allNotifications
+            .filter { !pinnedIDs.contains($0.id) && $0.service.isCalendar && $0.timestamp >= now }
+            .sorted { $0.timestamp < $1.timestamp }
+
         pinnedNotifications = Array(pinned)
         recentNotifications = Array(recent)
+        calendarNotifications = Array(calendar)
     }
 
     private func loadPinnedIDs() {
@@ -187,7 +197,7 @@ final class NotificationStore: @unchecked Sendable {
                 title: "1:1 with Manager",
                 subtitle: "2:00 PM - 2:30 PM",
                 body: "Zoom Meeting",
-                timestamp: now.addingTimeInterval(-1200),
+                timestamp: now.addingTimeInterval(1800),
                 url: nil,
                 isPinned: false,
                 iconName: "calendar",
@@ -223,7 +233,7 @@ final class NotificationStore: @unchecked Sendable {
                 title: "Team Standup",
                 subtitle: "9:00 AM - 9:15 AM",
                 body: "Google Meet",
-                timestamp: now.addingTimeInterval(-3000),
+                timestamp: now.addingTimeInterval(3600),
                 url: nil,
                 isPinned: false,
                 iconName: "calendar.badge.clock",

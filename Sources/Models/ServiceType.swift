@@ -29,6 +29,13 @@ enum ServiceType: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var isCalendar: Bool {
+        switch self {
+        case .eventKit, .googleCalendar: true
+        case .teams, .github, .notion: false
+        }
+    }
+
     var accentColorName: String {
         switch self {
         case .teams: "purple"

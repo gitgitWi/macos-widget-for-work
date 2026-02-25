@@ -4,10 +4,14 @@ import Foundation
 final class SettingsStore: @unchecked Sendable {
     var serviceConfigs: [ServiceType: ServiceConfig] = [:]
     var pollIntervalSeconds: Int = 60
+    var backgroundOpacity: Double = 1.0
+    var calendarLookaheadHours: Int = 24
 
     private let defaults = UserDefaults.standard
     private let configKey = "serviceConfigs"
     private let pollKey = "pollIntervalSeconds"
+    private let opacityKey = "backgroundOpacity"
+    private let lookaheadKey = "calendarLookaheadHours"
 
     init() {
         loadConfigs()
@@ -43,6 +47,16 @@ final class SettingsStore: @unchecked Sendable {
         defaults.set(seconds, forKey: pollKey)
     }
 
+    func setBackgroundOpacity(_ value: Double) {
+        backgroundOpacity = max(0.1, min(1.0, value))
+        defaults.set(backgroundOpacity, forKey: opacityKey)
+    }
+
+    func setCalendarLookahead(_ hours: Int) {
+        calendarLookaheadHours = max(1, min(72, hours))
+        defaults.set(calendarLookaheadHours, forKey: lookaheadKey)
+    }
+
     private func loadConfigs() {
         if let data = defaults.data(forKey: configKey),
            let configs = try? JSONDecoder().decode([ServiceType: ServiceConfig].self, from: data)
@@ -57,6 +71,16 @@ final class SettingsStore: @unchecked Sendable {
         let savedPoll = defaults.integer(forKey: pollKey)
         if savedPoll > 0 {
             pollIntervalSeconds = savedPoll
+        }
+
+        let savedOpacity = defaults.double(forKey: opacityKey)
+        if savedOpacity > 0 {
+            backgroundOpacity = savedOpacity
+        }
+
+        let savedLookahead = defaults.integer(forKey: lookaheadKey)
+        if savedLookahead > 0 {
+            calendarLookaheadHours = savedLookahead
         }
     }
 

@@ -55,6 +55,37 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Calendar") {
+                    Picker("Show events for next", selection: Binding(
+                        get: { settingsStore.calendarLookaheadHours },
+                        set: { settingsStore.setCalendarLookahead($0) }
+                    )) {
+                        Text("6 hours").tag(6)
+                        Text("12 hours").tag(12)
+                        Text("24 hours").tag(24)
+                        Text("48 hours").tag(48)
+                        Text("72 hours").tag(72)
+                    }
+                }
+
+                Section("Appearance") {
+                    HStack {
+                        Text("Background Opacity")
+                        Spacer()
+                        Text("\(Int(settingsStore.backgroundOpacity * 100))%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { settingsStore.backgroundOpacity },
+                            set: { settingsStore.setBackgroundOpacity($0) }
+                        ),
+                        in: 0.1...1.0,
+                        step: 0.05
+                    )
+                }
+
                 if let authError {
                     Section {
                         Text(authError)
@@ -65,7 +96,7 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
         }
-        .frame(width: 360, height: 420)
+        .frame(width: 360, height: 540)
         .onAppear {
             syncAuthState()
         }

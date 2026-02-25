@@ -1,22 +1,25 @@
 import Foundation
 
-final class GoogleCalendarService: NotificationService, Sendable {
+final class GoogleCalendarService: NotificationService, @unchecked Sendable {
     let serviceType: ServiceType = .googleCalendar
 
     private let httpClient = HTTPClient.shared
     private let keychain = KeychainManager.shared
     private let oauthManager: OAuthManager
     private let baseURL = "https://www.googleapis.com/calendar/v3"
+    private weak var settingsStore: SettingsStore?
 
-    init(oauthManager: OAuthManager) {
+    init(oauthManager: OAuthManager, settingsStore: SettingsStore? = nil) {
         self.oauthManager = oauthManager
+        self.settingsStore = settingsStore
     }
 
     func fetchNotifications() async throws -> [WorkNotification] {
         let token = try await getValidToken()
 
         let now = Date()
-        let endDate = Calendar.current.date(byAdding: .hour, value: 24, to: now)!
+        let lookaheadHours = settingsStore?.calendarLookaheadHours ?? 24
+        let endDate = Calendar.current.date(byAdding: .hour, value: lookaheadHours, to: now)!
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

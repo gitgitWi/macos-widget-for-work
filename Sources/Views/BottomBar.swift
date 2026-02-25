@@ -3,6 +3,7 @@ import SwiftUI
 struct BottomBar: View {
     let isRefreshing: Bool
     let lastRefresh: Date?
+    var backgroundOpacity: Double = 1.0
     let onRefresh: () -> Void
     let onSettings: () -> Void
 
@@ -37,7 +38,7 @@ struct BottomBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(.thinMaterial.opacity(backgroundOpacity))
         .animation(.easeInOut(duration: 0.2), value: isRefreshing)
     }
 }
