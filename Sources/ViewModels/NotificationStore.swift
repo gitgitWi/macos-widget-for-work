@@ -16,8 +16,17 @@ final class NotificationStore: @unchecked Sendable {
     private let defaults = UserDefaults.standard
     private let pinnedKey = "pinnedNotificationIDs"
 
+    private var services: [any NotificationService] = []
+    private weak var settingsStore: SettingsStore?
+
     init() {
         loadPinnedIDs()
+    }
+
+    /// Configure with real services and settings. Called after dependency injection.
+    func configure(services: [any NotificationService], settingsStore: SettingsStore) {
+        self.services = services
+        self.settingsStore = settingsStore
     }
 
     @MainActor
@@ -25,11 +34,43 @@ final class NotificationStore: @unchecked Sendable {
         isRefreshing = true
         errors = [:]
 
-        // For now, use mock data. Real services will be plugged in Phase 3.
-        let mockNotifications = Self.generateMockNotifications()
-        allNotifications = mockNotifications
-        updateSections()
+        let enabledServices = services.filter { service in
+            settingsStore?.isServiceEnabled(service.serviceType) ?? false
+        }
 
+        if enabledServices.isEmpty {
+            // No services connected - show mock data
+            allNotifications = Self.generateMockNotifications()
+        } else {
+            // Fetch from all enabled services concurrently
+            var fetched: [WorkNotification] = []
+
+            await withTaskGroup(of: (ServiceType, Result<[WorkNotification], Error>).self) { group in
+                for service in enabledServices {
+                    group.addTask {
+                        do {
+                            let notifications = try await service.fetchNotifications()
+                            return (service.serviceType, .success(notifications))
+                        } catch {
+                            return (service.serviceType, .failure(error))
+                        }
+                    }
+                }
+
+                for await (serviceType, result) in group {
+                    switch result {
+                    case .success(let notifications):
+                        fetched.append(contentsOf: notifications)
+                    case .failure(let error):
+                        errors[serviceType] = error.localizedDescription
+                    }
+                }
+            }
+
+            allNotifications = fetched
+        }
+
+        updateSections()
         isRefreshing = false
         lastRefreshDate = Date()
     }
@@ -71,9 +112,9 @@ final class NotificationStore: @unchecked Sendable {
         defaults.set(Array(pinnedIDs), forKey: pinnedKey)
     }
 
-    // MARK: - Mock Data (replaced by real services in Phase 3)
+    // MARK: - Mock Data (shown when no services are connected)
 
-    private static func generateMockNotifications() -> [WorkNotification] {
+    static func generateMockNotifications() -> [WorkNotification] {
         let now = Date()
         return [
             WorkNotification(

@@ -6,10 +6,12 @@ final class PanelController {
     private var panel: SidebarPanel?
     private let notificationStore: NotificationStore
     private let settingsStore: SettingsStore
+    private let oauthManager: OAuthManager
 
-    init(notificationStore: NotificationStore, settingsStore: SettingsStore) {
+    init(notificationStore: NotificationStore, settingsStore: SettingsStore, oauthManager: OAuthManager) {
         self.notificationStore = notificationStore
         self.settingsStore = settingsStore
+        self.oauthManager = oauthManager
     }
 
     var isVisible: Bool {
@@ -21,6 +23,11 @@ final class PanelController {
             createPanel()
         }
         panel?.orderFrontRegardless()
+
+        // Set the panel as the OAuth presentation anchor
+        if let panel {
+            oauthManager.setPresentationAnchor(panel)
+        }
     }
 
     func hidePanel() {
@@ -53,7 +60,8 @@ final class PanelController {
 
         let rootView = PanelContentView(
             notificationStore: notificationStore,
-            settingsStore: settingsStore
+            settingsStore: settingsStore,
+            oauthManager: oauthManager
         )
 
         let hostingView = NSHostingView(rootView: rootView)

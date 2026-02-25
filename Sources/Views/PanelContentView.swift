@@ -4,6 +4,7 @@ import SwiftUI
 struct PanelContentView: View {
     let notificationStore: NotificationStore
     let settingsStore: SettingsStore
+    let oauthManager: OAuthManager
     @State private var showSettings = false
 
     var body: some View {
@@ -48,7 +49,7 @@ struct PanelContentView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .sheet(isPresented: $showSettings) {
-            SettingsView(settingsStore: settingsStore)
+            SettingsView(settingsStore: settingsStore, oauthManager: oauthManager)
         }
         .task {
             await notificationStore.refreshAll()

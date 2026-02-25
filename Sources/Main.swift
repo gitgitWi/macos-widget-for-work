@@ -6,17 +6,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let notificationStore = NotificationStore()
     private let settingsStore = SettingsStore()
+    private var oauthManager: OAuthManager!
 
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Menu-bar-only app (no Dock icon)
         NSApp.setActivationPolicy(.accessory)
 
+        oauthManager = OAuthManager()
+
         setupStatusItem()
 
         panelController = PanelController(
             notificationStore: notificationStore,
-            settingsStore: settingsStore
+            settingsStore: settingsStore,
+            oauthManager: oauthManager
         )
         panelController.showPanel()
     }
