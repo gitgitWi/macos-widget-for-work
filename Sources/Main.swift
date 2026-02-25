@@ -1,6 +1,7 @@
 import AppKit
 
 @main
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: PanelController!
     private var statusItem: NSStatusItem!
@@ -8,12 +9,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settingsStore = SettingsStore()
     private var oauthManager: OAuthManager!
 
-    @MainActor
+    nonisolated static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Menu-bar-only app (no Dock icon)
         NSApp.setActivationPolicy(.accessory)
 
         oauthManager = OAuthManager()
+
+        // Create real service instances
+        let services: [any NotificationService] = [
+            GitHubService(oauthManager: oauthManager),
+            TeamsService(oauthManager: oauthManager),
+            NotionService(oauthManager: oauthManager),
+            EventKitCalendarService(),
+            GoogleCalendarService(oauthManager: oauthManager),
+        ]
+        notificationStore.configure(services: services, settingsStore: settingsStore)
 
         setupStatusItem()
 
@@ -25,7 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController.showPanel()
     }
 
-    @MainActor
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
@@ -38,7 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @MainActor
     @objc private func togglePanel() {
         panelController.togglePanel()
     }
