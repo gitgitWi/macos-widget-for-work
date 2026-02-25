@@ -1,0 +1,201 @@
+import Foundation
+
+@Observable
+final class NotificationStore: @unchecked Sendable {
+    var pinnedNotifications: [WorkNotification] = []
+    var recentNotifications: [WorkNotification] = []
+    var isRefreshing: Bool = false
+    var lastRefreshDate: Date?
+    var errors: [ServiceType: String] = [:]
+
+    private var allNotifications: [WorkNotification] = []
+    private var pinnedIDs: Set<String> = []
+    private let maxPinned = 3
+    private let maxRecent = 7
+
+    private let defaults = UserDefaults.standard
+    private let pinnedKey = "pinnedNotificationIDs"
+
+    init() {
+        loadPinnedIDs()
+    }
+
+    @MainActor
+    func refreshAll() async {
+        isRefreshing = true
+        errors = [:]
+
+        // For now, use mock data. Real services will be plugged in Phase 3.
+        let mockNotifications = Self.generateMockNotifications()
+        allNotifications = mockNotifications
+        updateSections()
+
+        isRefreshing = false
+        lastRefreshDate = Date()
+    }
+
+    func togglePin(_ notification: WorkNotification) {
+        if pinnedIDs.contains(notification.id) {
+            pinnedIDs.remove(notification.id)
+        } else {
+            guard pinnedIDs.count < maxPinned else { return }
+            pinnedIDs.insert(notification.id)
+        }
+        savePinnedIDs()
+        updateSections()
+    }
+
+    private func updateSections() {
+        let pinned = allNotifications
+            .filter { pinnedIDs.contains($0.id) }
+            .map { var n = $0; n.isPinned = true; return n }
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(maxPinned)
+
+        let recent = allNotifications
+            .filter { !pinnedIDs.contains($0.id) }
+            .sorted { $0.timestamp > $1.timestamp }
+            .prefix(maxRecent)
+
+        pinnedNotifications = Array(pinned)
+        recentNotifications = Array(recent)
+    }
+
+    private func loadPinnedIDs() {
+        if let array = defaults.stringArray(forKey: pinnedKey) {
+            pinnedIDs = Set(array)
+        }
+    }
+
+    private func savePinnedIDs() {
+        defaults.set(Array(pinnedIDs), forKey: pinnedKey)
+    }
+
+    // MARK: - Mock Data (replaced by real services in Phase 3)
+
+    private static func generateMockNotifications() -> [WorkNotification] {
+        let now = Date()
+        return [
+            WorkNotification(
+                id: "gh-1001",
+                service: .github,
+                title: "PR #42: Add dark mode support",
+                subtitle: "octocat/my-project",
+                body: "Review requested",
+                timestamp: now.addingTimeInterval(-300),
+                url: nil,
+                isPinned: false,
+                iconName: "arrow.triangle.branch",
+                priority: .high
+            ),
+            WorkNotification(
+                id: "teams-2001",
+                service: .teams,
+                title: "Sprint Planning Meeting",
+                subtitle: "John Doe",
+                body: "Let's discuss the Q1 roadmap",
+                timestamp: now.addingTimeInterval(-600),
+                url: nil,
+                isPinned: false,
+                iconName: "bubble.left.and.bubble.right",
+                priority: .normal
+            ),
+            WorkNotification(
+                id: "notion-3001",
+                service: .notion,
+                title: "Project Roadmap updated",
+                subtitle: "Updated 10 minutes ago",
+                body: "",
+                timestamp: now.addingTimeInterval(-900),
+                url: nil,
+                isPinned: false,
+                iconName: "doc.text",
+                priority: .normal
+            ),
+            WorkNotification(
+                id: "cal-4001",
+                service: .eventKit,
+                title: "1:1 with Manager",
+                subtitle: "2:00 PM - 2:30 PM",
+                body: "Zoom Meeting",
+                timestamp: now.addingTimeInterval(-1200),
+                url: nil,
+                isPinned: false,
+                iconName: "calendar",
+                priority: .high
+            ),
+            WorkNotification(
+                id: "gh-1002",
+                service: .github,
+                title: "Issue #87: Fix login timeout",
+                subtitle: "octocat/api-server",
+                body: "Assigned to you",
+                timestamp: now.addingTimeInterval(-1800),
+                url: nil,
+                isPinned: false,
+                iconName: "arrow.triangle.branch",
+                priority: .normal
+            ),
+            WorkNotification(
+                id: "teams-2002",
+                service: .teams,
+                title: "Design Review Feedback",
+                subtitle: "Jane Smith",
+                body: "I've left comments on the wireframe",
+                timestamp: now.addingTimeInterval(-2400),
+                url: nil,
+                isPinned: false,
+                iconName: "bubble.left.and.bubble.right",
+                priority: .normal
+            ),
+            WorkNotification(
+                id: "gcal-5001",
+                service: .googleCalendar,
+                title: "Team Standup",
+                subtitle: "9:00 AM - 9:15 AM",
+                body: "Google Meet",
+                timestamp: now.addingTimeInterval(-3000),
+                url: nil,
+                isPinned: false,
+                iconName: "calendar.badge.clock",
+                priority: .normal
+            ),
+            WorkNotification(
+                id: "notion-3002",
+                service: .notion,
+                title: "API Documentation draft",
+                subtitle: "Updated 1 hour ago",
+                body: "",
+                timestamp: now.addingTimeInterval(-3600),
+                url: nil,
+                isPinned: false,
+                iconName: "doc.text",
+                priority: .low
+            ),
+            WorkNotification(
+                id: "gh-1003",
+                service: .github,
+                title: "Release v2.1.0 published",
+                subtitle: "octocat/my-project",
+                body: "New release",
+                timestamp: now.addingTimeInterval(-5400),
+                url: nil,
+                isPinned: false,
+                iconName: "arrow.triangle.branch",
+                priority: .low
+            ),
+            WorkNotification(
+                id: "teams-2003",
+                service: .teams,
+                title: "Deployment notification",
+                subtitle: "DevOps Bot",
+                body: "Production deployment completed successfully",
+                timestamp: now.addingTimeInterval(-7200),
+                url: nil,
+                isPinned: false,
+                iconName: "bubble.left.and.bubble.right",
+                priority: .low
+            ),
+        ]
+    }
+}
