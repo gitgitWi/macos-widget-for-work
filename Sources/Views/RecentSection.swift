@@ -34,6 +34,7 @@ struct RecentSection: View {
                                 onPin: { onPin(notification) },
                                 onTap: { onTap(notification) }
                             )
+                            .transition(.opacity)
 
                             if notification.id != notifications.last?.id {
                                 Divider()
@@ -44,5 +45,6 @@ struct RecentSection: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: notifications.map(\.id))
     }
 }

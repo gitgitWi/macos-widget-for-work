@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     let settingsStore: SettingsStore
     let oauthManager: OAuthManager
+    var notificationStore: NotificationStore?
     @Environment(\.dismiss) private var dismiss
     @State private var authError: String?
     @State private var authenticatingService: ServiceType?
@@ -30,6 +31,7 @@ struct SettingsView: View {
                             isAuthenticating: authenticatingService == service,
                             onToggleVisibility: {
                                 settingsStore.toggleVisibility(for: service)
+                                refreshAfterChange()
                             },
                             onAuthenticate: {
                                 Task { await authenticate(service) }
@@ -38,6 +40,18 @@ struct SettingsView: View {
                                 signOut(service)
                             }
                         )
+                    }
+                }
+
+                Section("Refresh Interval") {
+                    Picker("Poll every", selection: Binding(
+                        get: { settingsStore.pollIntervalSeconds },
+                        set: { settingsStore.setPollInterval($0) }
+                    )) {
+                        Text("30 seconds").tag(30)
+                        Text("1 minute").tag(60)
+                        Text("2 minutes").tag(120)
+                        Text("5 minutes").tag(300)
                     }
                 }
 
@@ -75,6 +89,7 @@ struct SettingsView: View {
         do {
             try await oauthManager.authenticate(service: service, config: config)
             settingsStore.markAuthenticated(service, true)
+            refreshAfterChange()
         } catch {
             if (error as NSError).domain == ASWebAuthenticationSessionError.errorDomain,
                (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
@@ -90,6 +105,13 @@ struct SettingsView: View {
     private func signOut(_ service: ServiceType) {
         try? oauthManager.disconnect(service: service)
         settingsStore.markAuthenticated(service, false)
+        notificationStore?.clearError(for: service)
+        refreshAfterChange()
+    }
+
+    private func refreshAfterChange() {
+        guard let store = notificationStore else { return }
+        Task { await store.refreshAll() }
     }
 
     /// Sync Keychain state with SettingsStore on appear

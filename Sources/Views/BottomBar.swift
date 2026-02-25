@@ -24,6 +24,7 @@ struct BottomBar: View {
                 Text(lastRefresh, style: .relative)
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
+                    .contentTransition(.numericText())
             }
 
             Spacer()
@@ -37,5 +38,6 @@ struct BottomBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
+        .animation(.easeInOut(duration: 0.2), value: isRefreshing)
     }
 }

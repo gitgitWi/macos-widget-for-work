@@ -7,6 +7,7 @@ final class NotificationStore: @unchecked Sendable {
     var isRefreshing: Bool = false
     var lastRefreshDate: Date?
     var errors: [ServiceType: String] = [:]
+    var isShowingMockData: Bool = false
 
     private var allNotifications: [WorkNotification] = []
     private var pinnedIDs: Set<String> = []
@@ -18,6 +19,7 @@ final class NotificationStore: @unchecked Sendable {
 
     private var services: [any NotificationService] = []
     private weak var settingsStore: SettingsStore?
+    private var pollingTask: Task<Void, Never>?
 
     init() {
         loadPinnedIDs()
@@ -27,6 +29,26 @@ final class NotificationStore: @unchecked Sendable {
     func configure(services: [any NotificationService], settingsStore: SettingsStore) {
         self.services = services
         self.settingsStore = settingsStore
+    }
+
+    // MARK: - Polling
+
+    @MainActor
+    func startPolling() {
+        stopPolling()
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let interval = self?.settingsStore?.pollIntervalSeconds ?? 60
+                try? await Task.sleep(for: .seconds(interval))
+                guard !Task.isCancelled else { break }
+                await self?.refreshAll()
+            }
+        }
+    }
+
+    func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
     }
 
     @MainActor
@@ -41,6 +63,7 @@ final class NotificationStore: @unchecked Sendable {
         if enabledServices.isEmpty {
             // No services connected - show mock data
             allNotifications = Self.generateMockNotifications()
+            isShowingMockData = true
         } else {
             // Fetch from all enabled services concurrently
             var fetched: [WorkNotification] = []
@@ -68,11 +91,16 @@ final class NotificationStore: @unchecked Sendable {
             }
 
             allNotifications = fetched
+            isShowingMockData = false
         }
 
         updateSections()
         isRefreshing = false
         lastRefreshDate = Date()
+    }
+
+    func clearError(for service: ServiceType) {
+        errors.removeValue(forKey: service)
     }
 
     func togglePin(_ notification: WorkNotification) {

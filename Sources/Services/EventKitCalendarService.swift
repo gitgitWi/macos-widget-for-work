@@ -7,10 +7,16 @@ final class EventKitCalendarService: NotificationService, @unchecked Sendable {
     private let eventStore = EKEventStore()
 
     func fetchNotifications() async throws -> [WorkNotification] {
-        // Request calendar access
+        // Check current authorization first
+        let status = EKEventStore.authorizationStatus(for: .event)
+        if status == .denied || status == .restricted {
+            throw ServiceError.calendarAccessDenied
+        }
+
+        // Request calendar access (shows dialog only if not yet determined)
         let granted = try await eventStore.requestFullAccessToEvents()
         guard granted else {
-            throw ServiceError.accessDenied
+            throw ServiceError.calendarAccessDenied
         }
 
         let now = Date()

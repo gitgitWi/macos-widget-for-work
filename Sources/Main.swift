@@ -49,12 +49,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 systemSymbolName: "bell.badge",
                 accessibilityDescription: "Work Widget"
             )
-            button.action = #selector(togglePanel)
+            button.action = #selector(statusItemClicked)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+    }
+
+    @objc private func statusItemClicked() {
+        guard let event = NSApp.currentEvent else {
+            panelController.togglePanel()
+            return
+        }
+
+        if event.type == .rightMouseUp {
+            showStatusMenu()
+        } else {
+            panelController.togglePanel()
+        }
+    }
+
+    private func showStatusMenu() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Show/Hide Panel", action: #selector(togglePanel), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit WorkWidget", action: #selector(quitApp), keyEquivalent: "q")
+
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        // Remove menu after showing so left-click still toggles panel
+        statusItem.menu = nil
     }
 
     @objc private func togglePanel() {
         panelController.togglePanel()
+    }
+
+    @objc private func quitApp() {
+        notificationStore.stopPolling()
+        NSApp.terminate(nil)
     }
 }

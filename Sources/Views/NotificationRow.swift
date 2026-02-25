@@ -5,6 +5,8 @@ struct NotificationRow: View {
     let onPin: () -> Void
     let onTap: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: notification.iconName)
@@ -37,6 +39,7 @@ struct NotificationRow: View {
                     .foregroundStyle(notification.isPinned ? .orange : .secondary)
             }
             .buttonStyle(.plain)
+            .opacity(isHovered || notification.isPinned ? 1 : 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -47,7 +50,17 @@ struct NotificationRow: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(.orange.opacity(0.08))
             }
+            if isHovered {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.primary.opacity(0.04))
+            }
         }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: notification.isPinned)
     }
 
     private func colorForService(_ service: ServiceType) -> Color {

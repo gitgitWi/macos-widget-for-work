@@ -32,8 +32,13 @@ struct PinnedSection: View {
                         onPin: { onUnpin(notification) },
                         onTap: { onTap(notification) }
                     )
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.95).combined(with: .opacity),
+                        removal: .scale(scale: 0.95).combined(with: .opacity)
+                    ))
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: notifications.map(\.id))
     }
 }
