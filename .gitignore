@@ -6,3 +6,5 @@ DerivedData/
 .swiftpm/
 *.xcodeproj
 WorkWidget.app
+.env*
+!.env.sample

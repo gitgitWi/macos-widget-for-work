@@ -64,7 +64,7 @@ final class TeamsService: NotificationService, Sendable {
 
         // Check expiry and refresh if needed
         if let expiresAt = tokens.expiresAt, expiresAt < Date().addingTimeInterval(300) {
-            let clientID = ProcessInfo.processInfo.environment["MICROSOFT_CLIENT_ID"] ?? ""
+            let clientID = DotEnv.get("MICROSOFT_CLIENT_ID", default: "")
             let config = OAuthConfig.microsoft(clientID: clientID)
             return try await oauthManager.refreshTokenIfNeeded(for: .teams, config: config)
         }

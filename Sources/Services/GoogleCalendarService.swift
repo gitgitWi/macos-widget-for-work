@@ -64,7 +64,7 @@ final class GoogleCalendarService: NotificationService, @unchecked Sendable {
 
         // Check expiry and refresh if needed
         if let expiresAt = tokens.expiresAt, expiresAt < Date().addingTimeInterval(300) {
-            let clientID = ProcessInfo.processInfo.environment["GOOGLE_CLIENT_ID"] ?? ""
+            let clientID = DotEnv.get("GOOGLE_CLIENT_ID", default: "")
             let config = OAuthConfig.google(clientID: clientID)
             return try await oauthManager.refreshTokenIfNeeded(for: .googleCalendar, config: config)
         }

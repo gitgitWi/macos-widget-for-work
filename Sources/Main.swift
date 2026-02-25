@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Load .env file before anything else
+        DotEnv.load()
+
         // Menu-bar-only app (no Dock icon)
         NSApp.setActivationPolicy(.accessory)
 

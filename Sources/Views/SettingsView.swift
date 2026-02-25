@@ -161,21 +161,21 @@ struct SettingsView: View {
         switch service {
         case .github:
             return .github(
-                clientID: ProcessInfo.processInfo.environment["GITHUB_CLIENT_ID"] ?? "YOUR_GITHUB_CLIENT_ID",
-                clientSecret: ProcessInfo.processInfo.environment["GITHUB_CLIENT_SECRET"] ?? "YOUR_GITHUB_CLIENT_SECRET"
+                clientID: DotEnv.get("GITHUB_CLIENT_ID", default: "YOUR_GITHUB_CLIENT_ID"),
+                clientSecret: DotEnv.get("GITHUB_CLIENT_SECRET", default: "YOUR_GITHUB_CLIENT_SECRET")
             )
         case .teams:
             return .microsoft(
-                clientID: ProcessInfo.processInfo.environment["TEAMS_CLIENT_ID"] ?? "YOUR_TEAMS_CLIENT_ID"
+                clientID: DotEnv.get("MICROSOFT_CLIENT_ID", default: "YOUR_TEAMS_CLIENT_ID")
             )
         case .notion:
             return .notion(
-                clientID: ProcessInfo.processInfo.environment["NOTION_CLIENT_ID"] ?? "YOUR_NOTION_CLIENT_ID",
-                clientSecret: ProcessInfo.processInfo.environment["NOTION_CLIENT_SECRET"] ?? "YOUR_NOTION_CLIENT_SECRET"
+                clientID: DotEnv.get("NOTION_CLIENT_ID", default: "YOUR_NOTION_CLIENT_ID"),
+                clientSecret: DotEnv.get("NOTION_CLIENT_SECRET", default: "YOUR_NOTION_CLIENT_SECRET")
             )
         case .googleCalendar:
             return .google(
-                clientID: ProcessInfo.processInfo.environment["GOOGLE_CLIENT_ID"] ?? "YOUR_GOOGLE_CLIENT_ID"
+                clientID: DotEnv.get("GOOGLE_CLIENT_ID", default: "YOUR_GOOGLE_CLIENT_ID")
             )
         case .eventKit:
             fatalError("EventKit does not use OAuth")
