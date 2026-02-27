@@ -21,18 +21,13 @@ enum OAuthError: LocalizedError {
 }
 
 @MainActor
-final class OAuthManager: NSObject, ASWebAuthenticationPresentationContextProviding {
+final class OAuthManager: NSObject {
     private weak var presentationAnchor: NSWindow?
     private let keychain = KeychainManager.shared
+    private var sessionRunner: AuthSessionRunner?
 
     func setPresentationAnchor(_ window: NSWindow) {
         self.presentationAnchor = window
-    }
-
-    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        MainActor.assumeIsolated {
-            presentationAnchor ?? NSApp.windows.first ?? NSWindow()
-        }
     }
 
     // MARK: - Public API
@@ -175,23 +170,11 @@ final class OAuthManager: NSObject, ASWebAuthenticationPresentationContextProvid
     // MARK: - ASWebAuthenticationSession
 
     private func startAuthSession(url: URL, callbackScheme: String) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(
-                url: url,
-                callbackURLScheme: callbackScheme
-            ) { url, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else if let url {
-                    continuation.resume(returning: url)
-                } else {
-                    continuation.resume(throwing: OAuthError.noCallback)
-                }
-            }
-            session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = false
-            session.start()
-        }
+        let anchor = presentationAnchor ?? NSApp.windows.first ?? NSWindow()
+        let runner = AuthSessionRunner(anchor: anchor)
+        self.sessionRunner = runner
+        defer { self.sessionRunner = nil }
+        return try await runner.start(url: url, callbackScheme: callbackScheme)
     }
 
     // MARK: - Token Exchange
@@ -344,6 +327,58 @@ final class OAuthManager: NSObject, ASWebAuthenticationPresentationContextProvid
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+}
+
+// MARK: - Auth Session Runner (non-actor-isolated to avoid Swift 6 closure isolation trap)
+
+/// Runs ASWebAuthenticationSession outside of @MainActor so the completion handler
+/// closure does not inherit actor isolation and can safely be called on any thread.
+private final class AuthSessionRunner: NSObject, ASWebAuthenticationPresentationContextProviding, @unchecked Sendable {
+    private var session: ASWebAuthenticationSession?
+    private let anchor: NSWindow
+
+    init(anchor: NSWindow) {
+        self.anchor = anchor
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        anchor
+    }
+
+    func start(url: URL, callbackScheme: String) async throws -> URL {
+        // CRITICAL: Session and completion handler MUST be created in this
+        // nonisolated context (cooperative thread pool), NOT inside
+        // DispatchQueue.main.async. Swift 6 treats DispatchQueue.main as
+        // @MainActor, so any closure created there inherits MainActor isolation.
+        // When Apple's framework calls the completion handler from an XPC queue,
+        // the runtime isolation check (_swift_task_checkIsolatedSwift) fails → SIGTRAP.
+        try await withCheckedThrowingContinuation { continuation in
+            let completion: @Sendable (URL?, Error?) -> Void = { [weak self] callbackURL, error in
+                DispatchQueue.main.async {
+                    self?.session = nil
+                }
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let callbackURL {
+                    continuation.resume(returning: callbackURL)
+                } else {
+                    continuation.resume(throwing: OAuthError.noCallback)
+                }
+            }
+            let session = ASWebAuthenticationSession(
+                url: url,
+                callbackURLScheme: callbackScheme,
+                completionHandler: completion
+            )
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = false
+            self.session = session
+            // Only start() needs main thread — it presents the auth UI
+            DispatchQueue.main.async {
+                session.start()
+            }
+        }
     }
 }
 

@@ -22,6 +22,12 @@ cp "${BUILD_DIR}/${APP_NAME}" "${MACOS}/${APP_NAME}"
 # Copy Info.plist
 cp "Resources/Info.plist" "${CONTENTS}/Info.plist"
 
+# Copy .env if it exists
+if [ -f ".env" ]; then
+    cp ".env" "${RESOURCES}/.env"
+    echo "Bundled .env into Resources"
+fi
+
 # Ad-hoc sign without entitlements for local dev (entitlements need a real cert)
 codesign --force --deep --sign - "${APP_BUNDLE}"
 
