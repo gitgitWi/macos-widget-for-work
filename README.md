@@ -33,7 +33,13 @@ swift build
 # .app 번들 생성 + /Applications 설치 (release)
 bash Scripts/build-app.sh
 open /Applications/WorkWidget.app
+
+# (권장) 고정된 코드서명 identity 지정해서 빌드
+SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" bash Scripts/build-app.sh
 ```
+
+`build-app.sh`는 기본적으로 로컬 Keychain에서 `Apple Development` identity를 자동 탐색해 서명합니다. 
+적절한 identity가 없으면 ad-hoc(`-`) 서명으로 폴백하며, 이 경우 Keychain의 `Always Allow` 확인창이 빌드마다 다시 나타날 수 있습니다.
 
 ## OAuth 서비스 연동
 
