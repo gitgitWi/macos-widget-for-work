@@ -8,6 +8,7 @@ enum OAuthError: LocalizedError {
     case tokenExchangeFailed(String)
     case noPresentationAnchor
     case unsupportedService
+    case githubProfileFetchFailed
 
     var errorDescription: String? {
         switch self {
@@ -16,8 +17,14 @@ enum OAuthError: LocalizedError {
         case .tokenExchangeFailed(let msg): "Token exchange failed: \(msg)"
         case .noPresentationAnchor: "No window available for authentication"
         case .unsupportedService: "This service does not use OAuth"
+        case .githubProfileFetchFailed: "Failed to fetch GitHub profile for account"
         }
     }
+}
+
+struct GitHubAuthenticatedAccount: Sendable {
+    let login: String
+    let displayName: String?
 }
 
 @MainActor
@@ -51,8 +58,27 @@ final class OAuthManager: NSObject {
         try keychain.saveTokens(tokens, for: service)
     }
 
+    func authenticateGitHubAccount(config: OAuthConfig) async throws -> GitHubAuthenticatedAccount {
+        let tokens = try await performOAuth(config: config, isGitHub: true)
+        let profile = try await fetchGitHubProfile(accessToken: tokens.accessToken)
+
+        try keychain.saveTokens(tokens, for: .github) // Backward-compatible main token.
+        try keychain.saveGitHubTokens(tokens, for: profile.login)
+
+        return GitHubAuthenticatedAccount(login: profile.login, displayName: profile.name)
+    }
+
     func disconnect(service: ServiceType) throws {
         try keychain.deleteTokens(for: service)
+    }
+
+    func disconnectGitHubAccount(login: String) throws {
+        try keychain.deleteGitHubTokens(for: login)
+    }
+
+    func disconnectAllGitHubAccounts() throws {
+        try keychain.clearAllGitHubAccountTokens()
+        try? keychain.deleteTokens(for: .github)
     }
 
     // MARK: - Standard OAuth (GitHub, Microsoft, Google)
@@ -248,6 +274,22 @@ final class OAuthManager: NSObject {
         }
     }
 
+    private func fetchGitHubProfile(accessToken: String) async throws -> GitHubProfileResponse {
+        var request = URLRequest(url: URL(string: "https://api.github.com/user")!)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("WorkWidget/1.0", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw OAuthError.githubProfileFetchFailed
+        }
+
+        return try JSONDecoder().decode(GitHubProfileResponse.self, from: data)
+    }
+
     // MARK: - Token Refresh
 
     func refreshTokenIfNeeded(for service: ServiceType, config: OAuthConfig) async throws -> String {
@@ -404,4 +446,9 @@ private struct NotionTokenResponse: Decodable {
     let token_type: String?
     let workspace_id: String?
     let workspace_name: String?
+}
+
+private struct GitHubProfileResponse: Decodable {
+    let login: String
+    let name: String?
 }

@@ -8,6 +8,12 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var authError: String?
     @State private var authenticatingService: ServiceType?
+    @State private var githubRepos: [GitHubRepositorySummary] = []
+    @State private var githubAccounts: [String] = []
+    @State private var githubRepoSearch = ""
+    @State private var isLoadingGitHubRepos = false
+    @State private var githubRepoError: String?
+    @State private var hasLoadedGitHubRepos = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,22 +30,30 @@ struct SettingsView: View {
             Form {
                 Section("Services") {
                     ForEach(ServiceType.allCases) { service in
-                        ServiceSettingsRow(
-                            service: service,
-                            config: settingsStore.serviceConfigs[service]
-                                ?? ServiceConfig(isEnabled: false, isAuthenticated: false),
-                            isAuthenticating: authenticatingService == service,
-                            onToggleVisibility: {
-                                settingsStore.toggleVisibility(for: service)
-                                refreshAfterChange()
-                            },
-                            onAuthenticate: {
-                                Task { await authenticate(service) }
-                            },
-                            onSignOut: {
-                                signOut(service)
+                        let config = settingsStore.serviceConfigs[service]
+                            ?? ServiceConfig(isEnabled: false, isAuthenticated: false)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            ServiceSettingsRow(
+                                service: service,
+                                config: config,
+                                isAuthenticating: authenticatingService == service,
+                                onToggleVisibility: {
+                                    settingsStore.toggleVisibility(for: service)
+                                    refreshAfterChange()
+                                },
+                                onAuthenticate: {
+                                    Task { await authenticate(service) }
+                                },
+                                onSignOut: {
+                                    signOut(service)
+                                }
+                            )
+
+                            if service == .github, config.isAuthenticated {
+                                githubRepositorySelector
                             }
-                        )
+                        }
                     }
                 }
 
@@ -99,10 +113,29 @@ struct SettingsView: View {
         .frame(width: 360, height: 540)
         .onAppear {
             syncAuthState()
+            loadGitHubAccounts()
+            Task { await loadGitHubRepositoriesIfNeeded() }
+        }
+        .onChange(of: settingsStore.isAuthenticated(.github)) { _, isAuthenticated in
+            if isAuthenticated {
+                loadGitHubAccounts()
+                Task { await loadGitHubRepositoriesIfNeeded(force: true) }
+            } else {
+                githubAccounts = []
+                githubRepos = []
+                githubRepoSearch = ""
+                githubRepoError = nil
+                hasLoadedGitHubRepos = false
+            }
         }
     }
 
     private func authenticate(_ service: ServiceType) async {
+        if service == .github {
+            await addGitHubAccount()
+            return
+        }
+
         authError = nil
         authenticatingService = service
 
@@ -120,6 +153,9 @@ struct SettingsView: View {
         do {
             try await oauthManager.authenticate(service: service, config: config)
             settingsStore.markAuthenticated(service, true)
+            if service == .github {
+                await loadGitHubRepositoriesIfNeeded(force: true)
+            }
             refreshAfterChange()
         } catch {
             if (error as NSError).domain == ASWebAuthenticationSessionError.errorDomain,
@@ -133,8 +169,44 @@ struct SettingsView: View {
         authenticatingService = nil
     }
 
+    private func addGitHubAccount() async {
+        authError = nil
+        authenticatingService = .github
+        let config = oauthConfig(for: .github)
+
+        do {
+            let account = try await oauthManager.authenticateGitHubAccount(config: config)
+            settingsStore.markAuthenticated(.github, true)
+            loadGitHubAccounts()
+            settingsStore.setGitHubActiveAccount(login: account.login)
+            await loadGitHubRepositoriesIfNeeded(force: true)
+            refreshAfterChange()
+        } catch {
+            if (error as NSError).domain == ASWebAuthenticationSessionError.errorDomain,
+               (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
+                // User cancelled - not an error
+            } else {
+                authError = "GitHub: \(error.localizedDescription)"
+            }
+        }
+
+        authenticatingService = nil
+    }
+
     private func signOut(_ service: ServiceType) {
-        try? oauthManager.disconnect(service: service)
+        if service == .github {
+            try? oauthManager.disconnectAllGitHubAccounts()
+            settingsStore.setGitHubActiveAccount(login: nil)
+            settingsStore.clearGitHubRepositorySelection()
+            githubAccounts = []
+            githubRepos = []
+            githubRepoSearch = ""
+            githubRepoError = nil
+            hasLoadedGitHubRepos = false
+        } else {
+            try? oauthManager.disconnect(service: service)
+        }
+
         settingsStore.markAuthenticated(service, false)
         notificationStore?.clearError(for: service)
         refreshAfterChange()
@@ -149,11 +221,281 @@ struct SettingsView: View {
     private func syncAuthState() {
         let keychain = KeychainManager.shared
         for service in ServiceType.allCases where service != .eventKit {
-            let hasTokens = keychain.hasTokens(for: service)
+            let hasTokens: Bool
+            if service == .github {
+                hasTokens = !keychain.listGitHubAccountLogins().isEmpty || keychain.hasTokens(for: .github)
+            } else {
+                hasTokens = keychain.hasTokens(for: service)
+            }
             if hasTokens != settingsStore.isAuthenticated(service) {
                 settingsStore.markAuthenticated(service, hasTokens)
             }
         }
+    }
+
+    private func loadGitHubAccounts() {
+        githubAccounts = KeychainManager.shared.listGitHubAccountLogins().sorted()
+
+        if let active = settingsStore.githubActiveAccountLogin,
+           githubAccounts.contains(active) {
+            return
+        }
+
+        settingsStore.setGitHubActiveAccount(login: githubAccounts.first)
+    }
+
+    private func removeGitHubAccount(_ login: String) {
+        try? oauthManager.disconnectGitHubAccount(login: login)
+        loadGitHubAccounts()
+
+        if githubAccounts.isEmpty {
+            settingsStore.markAuthenticated(.github, false)
+            settingsStore.clearGitHubRepositorySelection()
+            githubRepos = []
+            hasLoadedGitHubRepos = false
+        }
+
+        Task {
+            await loadGitHubRepositoriesIfNeeded(force: true)
+            refreshAfterChange()
+        }
+    }
+
+    private var filteredGitHubRepos: [GitHubRepositorySummary] {
+        if githubRepoSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return githubRepos
+        }
+        let query = githubRepoSearch.lowercased()
+        return githubRepos.filter { $0.full_name.lowercased().contains(query) }
+    }
+
+    @ViewBuilder
+    private var githubRepositorySelector: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Accounts")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if authenticatingService == .github {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button("Add Account") {
+                        Task { await addGitHubAccount() }
+                    }
+                    .font(.system(size: 10))
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if githubAccounts.isEmpty {
+                Text("No linked GitHub accounts")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(githubAccounts, id: \.self) { login in
+                    let isActive = settingsStore.githubActiveAccountLogin == login
+                    HStack(spacing: 8) {
+                        Button {
+                            settingsStore.setGitHubActiveAccount(login: login)
+                            Task {
+                                await loadGitHubRepositoriesIfNeeded(force: true)
+                                refreshAfterChange()
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: isActive ? "largecircle.fill.circle" : "circle")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                                Text(login)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.primary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+
+                        if githubAccounts.count > 1 {
+                            Button(role: .destructive) {
+                                removeGitHubAccount(login)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            HStack {
+                Text("Repositories")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !settingsStore.githubSelectedRepoNames.isEmpty {
+                    Button("Use all") {
+                        settingsStore.clearGitHubRepositorySelection()
+                        refreshAfterChange()
+                    }
+                    .font(.system(size: 10))
+                    .buttonStyle(.plain)
+                }
+                Button("Reload") {
+                    Task { await loadGitHubRepositoriesIfNeeded(force: true) }
+                }
+                .font(.system(size: 10))
+                .buttonStyle(.plain)
+            }
+
+            TextField("Search repositories", text: $githubRepoSearch)
+                .textFieldStyle(.roundedBorder)
+
+            if isLoadingGitHubRepos {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading repositories...")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            } else if let githubRepoError {
+                Text(githubRepoError)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+            } else {
+                Text(
+                    settingsStore.githubSelectedRepoNames.isEmpty
+                        ? "All repositories selected"
+                        : "\(settingsStore.githubSelectedRepoNames.count) repositories selected"
+                )
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        if filteredGitHubRepos.isEmpty {
+                            Text("No repositories found")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 4)
+                        } else {
+                            ForEach(filteredGitHubRepos, id: \.full_name) { repo in
+                                let selected = settingsStore.githubSelectedRepoNames.contains(repo.full_name)
+                                Button {
+                                    settingsStore.setGitHubRepositorySelected(
+                                        repo.full_name,
+                                        selected: !selected
+                                    )
+                                    refreshAfterChange()
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(selected ? Color.accentColor : .secondary)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(repo.full_name)
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(1)
+                                            HStack(spacing: 6) {
+                                                if repo.fork {
+                                                    Text("fork")
+                                                        .font(.system(size: 9, weight: .semibold))
+                                                        .foregroundStyle(.secondary)
+                                                        .padding(.horizontal, 5)
+                                                        .padding(.vertical, 1)
+                                                        .background(.quaternary)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                                }
+                                                if repo.parsedPushedDate != .distantPast {
+                                                    Text(repo.parsedPushedDate, style: .relative)
+                                                        .font(.system(size: 10))
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                        }
+                                        Spacer()
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 180)
+            }
+        }
+        .padding(.leading, 32)
+    }
+
+    private func loadGitHubRepositoriesIfNeeded(force: Bool = false) async {
+        guard settingsStore.isAuthenticated(.github) else { return }
+        if hasLoadedGitHubRepos, !force { return }
+        if isLoadingGitHubRepos { return }
+
+        isLoadingGitHubRepos = true
+        githubRepoError = nil
+        defer { isLoadingGitHubRepos = false }
+
+        do {
+            let token = try activeGitHubAccessToken()
+            githubRepos = try await fetchGitHubRepositories(token: token)
+            hasLoadedGitHubRepos = true
+        } catch {
+            githubRepoError = "Failed to load repositories: \(error.localizedDescription)"
+        }
+    }
+
+    private func activeGitHubAccessToken() throws -> String {
+        let keychain = KeychainManager.shared
+
+        if let active = settingsStore.githubActiveAccountLogin,
+           let tokens = try keychain.getGitHubTokens(for: active) {
+            return tokens.accessToken
+        }
+
+        if let tokens = try keychain.getTokens(for: .github) {
+            return tokens.accessToken
+        }
+
+        throw ServiceError.notAuthenticated
+    }
+
+    private func fetchGitHubRepositories(token: String) async throws -> [GitHubRepositorySummary] {
+        var page = 1
+        var repositories: [GitHubRepositorySummary] = []
+
+        while page <= 5 {
+            var components = URLComponents(string: "https://api.github.com/user/repos")!
+            components.queryItems = [
+                URLQueryItem(name: "type", value: "all"),
+                URLQueryItem(name: "sort", value: "updated"),
+                URLQueryItem(name: "direction", value: "desc"),
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: String(page)),
+            ]
+            guard let url = components.url else { break }
+
+            let chunk: [GitHubRepositorySummary] = try await HTTPClient.shared.get(
+                url: url,
+                bearerToken: token,
+                additionalHeaders: ["Accept": "application/vnd.github+json"]
+            )
+            repositories.append(contentsOf: chunk)
+
+            if chunk.count < 100 { break }
+            page += 1
+        }
+
+        return repositories
     }
 
     private func oauthConfig(for service: ServiceType) -> OAuthConfig {

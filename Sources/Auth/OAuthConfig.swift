@@ -22,7 +22,7 @@ struct OAuthConfig: Sendable {
             tokenURL: "https://github.com/login/oauth/access_token",
             clientID: clientID,
             clientSecret: clientSecret,
-            scopes: "notifications,read:user",
+            scopes: "notifications,read:user,repo",
             callbackScheme: "workwidget"
         )
     }

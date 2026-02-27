@@ -3,6 +3,8 @@ import Foundation
 @Observable
 final class SettingsStore: @unchecked Sendable {
     var serviceConfigs: [ServiceType: ServiceConfig] = [:]
+    var githubSelectedRepoNames: Set<String> = []
+    var githubActiveAccountLogin: String?
     var pollIntervalSeconds: Int = 60
     var backgroundOpacity: Double = 1.0
     var calendarLookaheadHours: Int = 24
@@ -57,6 +59,29 @@ final class SettingsStore: @unchecked Sendable {
         defaults.set(calendarLookaheadHours, forKey: lookaheadKey)
     }
 
+    func setGitHubRepositorySelected(_ fullName: String, selected: Bool) {
+        if selected {
+            githubSelectedRepoNames.insert(fullName)
+        } else {
+            githubSelectedRepoNames.remove(fullName)
+        }
+        saveGitHubSelectedRepos()
+    }
+
+    func clearGitHubRepositorySelection() {
+        githubSelectedRepoNames.removeAll()
+        saveGitHubSelectedRepos()
+    }
+
+    func setGitHubActiveAccount(login: String?) {
+        githubActiveAccountLogin = login?.lowercased()
+        if let login = githubActiveAccountLogin {
+            defaults.set(login, forKey: AppDefaultsKeys.githubActiveAccountLogin)
+        } else {
+            defaults.removeObject(forKey: AppDefaultsKeys.githubActiveAccountLogin)
+        }
+    }
+
     private func loadConfigs() {
         if let data = defaults.data(forKey: configKey),
            let configs = try? JSONDecoder().decode([ServiceType: ServiceConfig].self, from: data)
@@ -82,11 +107,19 @@ final class SettingsStore: @unchecked Sendable {
         if savedLookahead > 0 {
             calendarLookaheadHours = savedLookahead
         }
+
+        let savedRepos = defaults.stringArray(forKey: AppDefaultsKeys.githubSelectedRepoNames) ?? []
+        githubSelectedRepoNames = Set(savedRepos)
+        githubActiveAccountLogin = defaults.string(forKey: AppDefaultsKeys.githubActiveAccountLogin)
     }
 
     private func saveConfigs() {
         if let data = try? JSONEncoder().encode(serviceConfigs) {
             defaults.set(data, forKey: configKey)
         }
+    }
+
+    private func saveGitHubSelectedRepos() {
+        defaults.set(Array(githubSelectedRepoNames), forKey: AppDefaultsKeys.githubSelectedRepoNames)
     }
 }
