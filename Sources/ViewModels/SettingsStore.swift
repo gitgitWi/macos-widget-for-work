@@ -8,12 +8,14 @@ final class SettingsStore: @unchecked Sendable {
     var pollIntervalSeconds: Int = 60
     var backgroundOpacity: Double = 1.0
     var calendarLookaheadHours: Int = 24
+    var githubNotificationDays: Int = 7
 
     private let defaults = UserDefaults.standard
     private let configKey = "serviceConfigs"
     private let pollKey = "pollIntervalSeconds"
     private let opacityKey = "backgroundOpacity"
     private let lookaheadKey = "calendarLookaheadHours"
+    private let githubDaysKey = "githubNotificationDays"
 
     init() {
         loadConfigs()
@@ -57,6 +59,11 @@ final class SettingsStore: @unchecked Sendable {
     func setCalendarLookahead(_ hours: Int) {
         calendarLookaheadHours = max(1, min(72, hours))
         defaults.set(calendarLookaheadHours, forKey: lookaheadKey)
+    }
+
+    func setGitHubNotificationDays(_ days: Int) {
+        githubNotificationDays = max(1, min(30, days))
+        defaults.set(githubNotificationDays, forKey: githubDaysKey)
     }
 
     func setGitHubRepositorySelected(_ fullName: String, selected: Bool) {
@@ -106,6 +113,11 @@ final class SettingsStore: @unchecked Sendable {
         let savedLookahead = defaults.integer(forKey: lookaheadKey)
         if savedLookahead > 0 {
             calendarLookaheadHours = savedLookahead
+        }
+
+        let savedGitHubDays = defaults.integer(forKey: githubDaysKey)
+        if savedGitHubDays > 0 {
+            githubNotificationDays = savedGitHubDays
         }
 
         let savedRepos = defaults.stringArray(forKey: AppDefaultsKeys.githubSelectedRepoNames) ?? []

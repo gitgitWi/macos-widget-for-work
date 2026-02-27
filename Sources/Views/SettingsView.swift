@@ -69,6 +69,22 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("GitHub") {
+                    Picker("Show notifications from", selection: Binding(
+                        get: { settingsStore.githubNotificationDays },
+                        set: {
+                            settingsStore.setGitHubNotificationDays($0)
+                            notificationStore?.updateSections()
+                        }
+                    )) {
+                        Text("Last 1 day").tag(1)
+                        Text("Last 3 days").tag(3)
+                        Text("Last 1 week").tag(7)
+                        Text("Last 2 weeks").tag(14)
+                        Text("Last 1 month").tag(30)
+                    }
+                }
+
                 Section("Calendar") {
                     Picker("Show events for next", selection: Binding(
                         get: { settingsStore.calendarLookaheadHours },

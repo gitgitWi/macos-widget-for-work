@@ -72,6 +72,14 @@ struct PanelContentView: View {
                 onTap: { openURL($0.url) }
             )
 
+            if !notificationStore.githubNotifications.isEmpty || settingsStore.isServiceEnabled(.github) {
+                GitHubNotificationSection(
+                    notifications: notificationStore.githubNotifications,
+                    onPin: { notificationStore.togglePin($0) },
+                    onTap: { openURL($0.url) }
+                )
+            }
+
             NotificationSection(
                 icon: "clock",
                 title: "Recent",
@@ -107,7 +115,6 @@ struct PanelContentView: View {
             )
         }
         .frame(width: 308)
-        .fixedSize(horizontal: false, vertical: true)
         .background(.ultraThinMaterial.opacity(settingsStore.backgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .animation(.easeInOut(duration: 0.2), value: notificationStore.errors.count)

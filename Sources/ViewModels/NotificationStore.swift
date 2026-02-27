@@ -3,6 +3,7 @@ import Foundation
 @Observable
 final class NotificationStore: @unchecked Sendable {
     var pinnedNotifications: [WorkNotification] = []
+    var githubNotifications: [WorkNotification] = []
     var recentNotifications: [WorkNotification] = []
     var calendarNotifications: [WorkNotification] = []
     var isRefreshing: Bool = false
@@ -115,7 +116,7 @@ final class NotificationStore: @unchecked Sendable {
         updateSections()
     }
 
-    private func updateSections() {
+    func updateSections() {
         let now = Date()
 
         let pinned = allNotifications
@@ -124,9 +125,16 @@ final class NotificationStore: @unchecked Sendable {
             .sorted { $0.timestamp > $1.timestamp }
             .prefix(maxPinned)
 
-        // Non-calendar, non-pinned → Recent
+        // GitHub notifications: non-pinned, within configured time window
+        let githubDays = settingsStore?.githubNotificationDays ?? 7
+        let githubCutoff = Calendar.current.date(byAdding: .day, value: -githubDays, to: now) ?? now
+        let github = allNotifications
+            .filter { !pinnedIDs.contains($0.id) && $0.service == .github && $0.timestamp >= githubCutoff }
+            .sorted { $0.timestamp > $1.timestamp }
+
+        // Non-calendar, non-pinned, non-GitHub → Recent
         let recent = allNotifications
-            .filter { !pinnedIDs.contains($0.id) && !$0.service.isCalendar }
+            .filter { !pinnedIDs.contains($0.id) && !$0.service.isCalendar && $0.service != .github }
             .sorted { $0.timestamp > $1.timestamp }
             .prefix(maxRecent)
 
@@ -136,6 +144,7 @@ final class NotificationStore: @unchecked Sendable {
             .sorted { $0.timestamp < $1.timestamp }
 
         pinnedNotifications = Array(pinned)
+        githubNotifications = Array(github)
         recentNotifications = Array(recent)
         calendarNotifications = Array(calendar)
     }
